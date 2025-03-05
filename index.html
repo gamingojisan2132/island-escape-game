@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>無人島脱出ゲーム</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #e0f7e0;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: #333;
+        }
+        header {
+            background-color: #4d8e4d;
+            color: white;
+            width: 100%;
+            text-align: center;
+            padding: 1rem 0;
+            margin-bottom: 2rem;
+        }
+        .game-container {
+            display: flex;
+            max-width: 1000px;
+            margin: 0 auto;
+            gap: 20px;
+        }
+        .game-board {
+            flex: 2;
+            background-color: #f9f9f9;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(5, 90px);
+            grid-template-rows: repeat(5, 90px);
+            gap: 10px;
+            margin-bottom: 20px;
+            position: relative;
+        }
+        .tile {
+            width: 90px;
+            height: 90px;
+            background-color: #8db596;
+            clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            position: relative;
+            transition: all 0.3s;
+            font-weight: bold;
+            color: white;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+        }
+        .tile.revealed {
+            background-color: #c8e6c9;
+        }
+        .tile.beach {
+            background-color: #f9e076;
+            color: #333;
+            text-shadow: none;
+        }
+        .tile:hover {
+            transform: scale(1.05);
+        }
+        .cost {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            width: 20px;
+            height: 20px;
+            background-color: white;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 14px;
+            color: #333;
+        }
+        .player {
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background-color: #ff5722;
+            border: 2px solid white;
+        }
+        .player-info {
+            flex: 1;
+            background-color: #f9f9f9;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .stats {
+            margin-bottom: 20px;
+        }
+        .character-card {
+            background-color: white;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .inventory {
+            margin-bottom: 20px;
+        }
+        .inventory-item {
+            background-color: white;
+            border-radius: 8px;
+            padding: 10px;
+            margin-bottom: 10px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            transition: all 0.2s;
+        }
+        .inventory-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+        .actions {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        button {
+            background-color: #4d8e4d;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #3d7d3d;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .event-log {
+            margin-top: 20px;
+            max-height: 150px;
+            overflow-y: auto;
+            background-color: #f0f0f0;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .log-entry {
+            margin: 5px 0;
+            font-size: 14px;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 100;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.7);
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: 15% auto;
+            padding: 20px;
+            border-radius: 10px;
+            width: 80%;
+            max-width: 500px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>無人島脱出</h1>
+        <p style="color: white; max-width: 800px; margin: 0 auto; padding: 0 10px;">島を探索して必要な資材を集め、10点以上の資材ポイントで脱出を目指せ！</p>
+    </header>
+
+    <div class="game-container">
+        <div class="game-board">
+            <div class="grid" id="island-grid">
+                <!-- 島のタイルはJavaScriptで生成 -->
+            </div>
+        </div>
+        <div class="player-info">
+            <div class="stats">
+                <h2>キャラクター情報</h2>
+                <div class="character-card">
+                    <h3 id="character-name">ボディビルダー</h3>
+                    <p>体力: <span id="health">4</span>/4</p>
+                    <p>特殊能力: 木材を手に入れた時+1</p>
+                    <p>ターン: <span id="turn-counter">0</span></p>
+                </div>
+            </div>
+            <div class="inventory">
+                <h2>所持品</h2>
+                <div id="inventory-list">
+                    <p>所持品はありません</p>
+                </div>
+            </div>
+            <div class="actions">
+                <h2>行動</h2>
+                <button id="end-turn">ターン終了</button>
+                <button id="use-food" disabled>食料を使う</button>
+            </div>
+            <div class="event-log">
+                <h2>イベントログ</h2>
+                <div id="log-container">
+                    <p class="log-entry">島に漂着しました。資材を集めて脱出を目指しましょう！</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- スタートモーダル -->
+    <div id="start-modal" class="modal">
+        <div class="modal-content">
+            <h2>無人島脱出ゲーム</h2>
+            <p>船が難破し、あなたは無人島に漂着しました。島を探索して必要な資材を集め、脱出を目指しましょう！</p>
+            <h3>ゲームの流れ</h3>
+            <ul style="text-align: left;">
+                <li>タイルをクリックして移動（体力を消費）</li>
+                <li>未開のタイルにはイベントが発生</li>
+                <li>木材やロープなどの資材を集める</li>
+                <li>資材ポイントが合計10点以上で脱出成功</li>
+                <li>体力が0になるとゲームオーバー</li>
+            </ul>
+            <button id="start-game">ゲームスタート</button>
+        </div>
+    </div>
+
+    <!-- イベントモーダル -->
+    <div id="event-modal" class="modal">
+        <div class="modal-content">
+            <h2 id="event-title">イベント</h2>
+            <p id="event-description">イベント内容</p>
+            <button id="event-ok">OK</button>
+        </div>
+    </div>
+
+    <!-- ゲームオーバーモーダル -->
+    <div id="game-over-modal" class="modal">
+        <div class="modal-content">
+            <h2 id="result-title">ゲーム終了</h2>
+            <p id="result-description">結果</p>
+            <button id="restart-game">もう一度プレイ</button>
+        </div>
+    </div>
+
+    <script>
+        // DOM要素
+        const islandGrid = document.getElementById('island-grid');
+        const healthDisplay = document.getElementById('health');
+        const inventoryList = document.getElementById('inventory-list');
+        const logContainer = document.getElementById('log-container');
+        const endTurnButton = document.getElementById('end-turn');
+        const useFoodButton = document.getElementById('use-food');
+        
+        const startModal = document.getElementById('start-modal');
+        const startGameButton = document.getElementById('start-game');
+        const eventModal = document.getElementById('event-modal');
+        const eventTitle = document.getElementById('event-title');
+        const eventDescription = document.getElementById('event-description');
+        const eventOkButton = document.getElementById('event-ok');
+        const gameOverModal = document.getElementById('game-over-modal');
+        const resultTitle = document.getElementById('result-title');
+        const resultDescription = document.getElementById('result-description');
+        const restartGameButton = document.getElementById('restart-game');
+
+        // ゲームの状態
+        let gameState = {
+            player: {
+                health: 4,
+                maxHealth: 4,
+                position: 12,  // 真ん中のタイル（5x5グリッドの中央）
+                inventory: []
+            },
+            island: [],
+            revealedTiles: [12],  // 開始位置のタイルは最初から公開
+            turn: 0,
+            gameOver: false,
+            canMove: true
+        };
+
+        // イベントカード定義
+        const eventCards = [
+            { 
+                type: 'food', 
+                name: '肉', 
+                description: '体力+3', 
+                itemDescription: '使用すると体力が3回復する。', 
+                effect: () => addHealth(3) 
+            },
+            { 
+                type: 'food', 
+                name: '魚', 
+                description: '体力+2', 
+                itemDescription: '使用すると体力が2回復する。', 
+                effect: () => addHealth(2) 
+            },
+            { 
+                type: 'food', 
+                name: '果物', 
+                description: '体力+1', 
+                itemDescription: '使用すると体力が1回復する。', 
+                effect: () => addHealth(1) 
+            },
+            { 
+                type: 'accident', 
+                name: 'イノシシに襲われる', 
+                description: '体力-1', 
+                effect: () => addHealth(-1) 
+            },
+            { 
+                type: 'accident', 
+                name: '熱中症', 
+                description: '体力-2', 
+                effect: () => addHealth(-2) 
+            },
+            { 
+                type: 'material', 
+                name: '木材', 
+                description: 'イカダに必要な材料', 
+                itemDescription: 'イカダ作成に必要な資材。3点の資材ポイント。', 
+                points: 3, 
+                effect: function() { addItem(this.name, this.points, this.itemDescription); } 
+            },
+            { 
+                type: 'material', 
+                name: 'ロープ', 
+                description: 'イカダに必要な材料', 
+                itemDescription: 'イカダ作成に必要な資材。2点の資材ポイント。', 
+                points: 2, 
+                effect: function() { addItem(this.name, this.points, this.itemDescription); } 
+            },
+            { 
+                type: 'material', 
+                name: '布', 
+                description: 'イカダに必要な材料',
+                itemDescription: 'イカダ作成に必要な資材。2点の資材ポイント。', 
+                points: 2, 
+                effect: function() { addItem(this.name, this.points, this.itemDescription); } 
+            },
+            { 
+                type: 'item', 
+                name: '斧', 
+                description: '木材を手に入れた時+1', 
+                itemDescription: '木材を見つけた時に追加で1点獲得できる。', 
+                effect: function() { addItem(this.name, 0, this.itemDescription); } 
+            },
+            { 
+                type: 'item', 
+                name: '釣り竿', 
+                description: '食料を手に入れた時+1',
+                itemDescription: '食料を見つけた時に追加で回復量が増える。', 
+                effect: function() { addItem(this.name, 0, this.itemDescription); } 
+            },
+            { 
+                type: 'event', 
+                name: '野営地', 
+                description: '体力+2', 
+                effect: () => addHealth(2) 
+            }
+        ];
+
+        // ゲーム初期化
+        function initGame() {
+            // 状態のリセット
+            gameState = {
+                player: {
+                    health: 4,
+                    maxHealth: 4,
+                    position: 12,  // 真ん中のタイル（5x5グリッドの中央）
+                    inventory: []
+                },
+                island: [],
+                revealedTiles: [12],  // 開始位置のタイルは最初から公開
+                turn: 0,
+                gameOver: false,
+                canMove: true
+            };
+
+            // 島の生成
+            generateIsland();
+            
+            // インターフェース更新
+            updateHealthDisplay();
+            updateInventoryDisplay();
+            document.getElementById('turn-counter').textContent = '0';
+            addToLog('島に漂着しました。資材を集めて脱出を目指しましょう！');
+            
+            // 初期アイテムの追加
+            addInitialItems();
+            
+            // スタートモーダルを非表示
+            startModal.style.display = 'none';
+        }
+
+        // 島のグリッドを生成
+        function generateIsland() {
+            // 島グリッドをクリア
+            islandGrid.innerHTML = '';
+            
+            // 5x5のグリッドを作成
+            const rows = 5;
+            const cols = 5;
+            const totalTiles = rows * cols;
+            
+            // オフセット位置計算用
+            const offsetRow = [0, -1, -1, 0, 1, 1];
+            const offsetCol = [-1, -1, 0, 1, 0, -1];
+            
+            // ゲーム状態の島マップを初期化
+            gameState.island = [];
+            
+            // タイルを生成
+            for (let i = 0; i < totalTiles; i++) {
+                // タイルの種類とコストを決定
+                const isBeach = i === 12;  // 中央のタイルを初期位置に
+                const tileType = isBeach ? 'beach' : 'unknown';
+                const cost = isBeach ? 0 : Math.floor(Math.random() * 3) + 1;
+                
+                // ゲーム状態に追加
+                gameState.island.push({
+                    type: tileType,
+                    cost: cost,
+                    event: tileType === 'beach' ? null : getRandomEvent(),
+                    row: Math.floor(i / cols),
+                    col: i % cols
+                });
+                
+                // タイル要素を作成
+                const tile = document.createElement('div');
+                tile.className = `tile ${isBeach ? 'beach revealed' : ''}`;
+                tile.dataset.index = i;
+                
+                // ビーチタイルにはテキストを追加
+                if (isBeach) {
+                    tile.textContent = '砂浜';
+                }
+                
+                // コスト表示
+                const costElement = document.createElement('div');
+                costElement.className = 'cost';
+                costElement.textContent = cost;
+                tile.appendChild(costElement);
+                
+                // クリックイベント
+                tile.addEventListener('click', () => tileClicked(i));
+                
+                // ヘックスのようにオフセットを適用
+                const row = Math.floor(i / cols);
+                if (row % 2 === 1) {
+                    tile.style.marginLeft = '45px';
+                }
+                
+                // プレイヤーアイコン（ビーチの場合）
+                if (isBeach) {
+                    const player = document.createElement('div');
+                    player.className = 'player';
+                    player.id = 'player-icon';
+                    tile.appendChild(player);
+                }
+                
+                // グリッドに追加
+                islandGrid.appendChild(tile);
+            }
+        }
+
+        // 初期アイテムの追加
+        function addInitialItems() {
+            // 食料を2つ追加（果物と魚）
+            addItem('果物', 0, '使用すると体力が1回復する。');
+            addItem('魚', 0, '使用すると体力が2回復する。');
+            addToLog('初期食料を2つ持っています。賢く使いましょう！');
+        }
+
+        // タイルクリック時の処理
+        function tileClicked(index) {
+            // 移動できない条件をチェック
+            if (!gameState.canMove || gameState.gameOver) return;
+            
+            // 自分のいるタイルをクリックした場合
+            if (index === gameState.player.position) {
+                addToLog('既にこのタイルにいます。他のタイルを選んでください。');
+                return;
+            }
+            
+            // 隣接するタイルかチェック
+            if (!isAdjacentTile(gameState.player.position, index)) {
+                addToLog('そのタイルには移動できません。隣接するタイルを選んでください。');
+                return;
+            }
+            
+            const tile = gameState.island[index];
+            
+            // 移動コストを計算
+            let moveCost = tile.cost;
+            if (gameState.revealedTiles.includes(index)) {
+                // 既に公開済みのタイルは1低いコスト（最小0）
+                moveCost = Math.max(0, moveCost - 1);
+            }
+            
+            // 体力が足りるかチェック
+            if (gameState.player.health <= moveCost) {
+                addToLog('体力が足りません！食料を使うか、別のタイルを選んでください。');
+                return;
+            }
+            
+            // 移動処理
+            movePlayer(index, moveCost);
+            
+            // タイルが未公開なら公開して効果を適用
+            if (!gameState.revealedTiles.includes(index)) {
+                revealTile(index);
+                
+                // タイルのイベントを発生
+                if (tile.event) {
+                    triggerEvent(tile.event);
+                }
+            }
+            
+            // 移動後は他の移動はできない
+            gameState.canMove = false;
+            addToLog('移動しました。ターン終了ボタンを押して次のターンに進みましょう。');
+        }
+
+        // 隣接するタイルかどうかをチェック
+        function isAdjacentTile(currentIndex, targetIndex) {
+            // 現在のタイルと目標タイルを取得
+            const currentTile = gameState.island[currentIndex];
+            const targetTile = gameState.island[targetIndex];
+            
+            // 行と列の差を計算
+            const rowDiff = Math.abs(currentTile.row - targetTile.row);
+            const colDiff = Math.abs(currentTile.col - targetTile.col);
+            
+            // ヘックスグリッドの隣接チェック
+            // 同じ行では列の差が1
+            if (rowDiff === 0 && colDiff === 1) return true;
+            
+            // 偶数行の場合
+            if (currentTile.row % 2 === 0) {
+                // 隣の行では、同じ列か左側の列(-1)が隣接
+                return (rowDiff === 1 && (colDiff === 0 || targetTile.col === currentTile.col - 1));
+            } 
+            // 奇数行の場合
+            else {
+                // 隣の行では、同じ列か右側の列(+1)が隣接
+                return (rowDiff === 1 && (colDiff === 0 || targetTile.col === currentTile.col + 1));
+            }
+        }
+
+        // プレイヤー移動
+        function movePlayer(newPosition, cost) {
+            // 古い位置からプレイヤーアイコンを削除
+            const oldPlayerIcon = document.getElementById('player-icon');
+            if (oldPlayerIcon) {
+                oldPlayerIcon.remove();
+            }
+            
+            // 新しい位置にプレイヤーアイコンを配置
+            const newTile = document.querySelector(`.tile[data-index="${newPosition}"]`);
+            const playerIcon = document.createElement('div');
+            playerIcon.className = 'player';
+            playerIcon.id = 'player-icon';
+            newTile.appendChild(playerIcon);
+            
+            // ゲーム状態を更新
+            gameState.player.position = newPosition;
+            gameState.player.health -= cost;
+            
+            // 画面表示を更新
+            updateHealthDisplay();
+        }
+
+        // タイルの公開
+        function revealTile(index) {
+            const tile = document.querySelector(`.tile[data-index="${index}"]`);
+            tile.classList.add('revealed');
+            
+            // タイルの種類に応じたテキストやスタイルを適用
+            const tileData = gameState.island[index];
+            if (tileData.event) {
+                // タイルにイベント名を表示
+                tile.textContent = tileData.event.name;
+            }
+            
+            // 公開済みリストに追加
+            gameState.revealedTiles.push(index);
+        }
+
+        // ランダムなイベントの取得
+        function getRandomEvent() {
+            const randomIndex = Math.floor(Math.random() * eventCards.length);
+            return eventCards[randomIndex];
+        }
+
+        // イベントの発生
+        function triggerEvent(event) {
+            // モーダルの内容を設定
+            eventTitle.textContent = event.name;
+            eventDescription.textContent = event.description;
+            
+            // モーダルを表示
+            eventModal.style.display = 'block';
+            
+            // ログに追加
+            addToLog(`イベント発生: ${event.name} - ${event.description}`);
+            
+            // イベント効果を適用
+            event.effect();
+        }
+
+        // アイテムの効果を適用（食料の回復量など）
+        function applyItemEffects(eventType, amount) {
+            // 釣り竿の効果（食料の回復量アップ）
+            if (
+                (eventType === 'food') && 
+                gameState.player.inventory.some(item => item.name === '釣り竿')
+            ) {
+                amount += 1;
+                addToLog('釣り竿の効果: 食料の回復量+1');
+            }
+            
+            return amount;
+        }
+
+        // 体力の変更
+        function addHealth(amount) {
+            // アイテム効果を適用
+            const adjustedAmount = applyItemEffects('food', amount);
+            
+            gameState.player.health = Math.min(
+                gameState.player.maxHealth, 
+                Math.max(0, gameState.player.health + adjustedAmount)
+            );
+            
+            updateHealthDisplay();
+            
+            // 体力が0ならゲームオーバー
+            if (gameState.player.health <= 0) {
+                gameOver(false);
+            }
+        }
+
+        // アイテムの追加
+        function addItem(name, points, description) {
+            // ボディビルダーの特殊能力（木材+1）
+            if (name === '木材' && document.getElementById('character-name').textContent === 'ボディビルダー') {
+                points += 1;
+                addToLog('ボディビルダーの特殊能力が発動: 木材+1');
+            }
+            
+            // 斧の効果（木材の得点アップ）
+            if (name === '木材' && gameState.player.inventory.some(item => item.name === '斧')) {
+                points += 1;
+                addToLog('斧の効果: 木材+1');
+            }
+            
+            // インベントリに追加
+            const existingItem = gameState.player.inventory.find(item => item.name === name);
+            
+            if (existingItem) {
+                existingItem.count += 1;
+            } else {
+                gameState.player.inventory.push({
+                    name: name,
+                    count: 1,
+                    points: points,
+                    description: description
+                });
+            }
+            
+            // 食料を入手した場合、食料使用ボタンを有効化
+            if (name === '肉' || name === '魚' || name === '果物') {
+                useFoodButton.disabled = false;
+            }
+            
+            updateInventoryDisplay();
+            addToLog(`${name}を入手しました。`);
+        }
+
+        // 体力表示の更新
+        function updateHealthDisplay() {
+            healthDisplay.textContent = gameState.player.health;
+        }
+
+        // インベントリ表示の更新
+        function updateInventoryDisplay() {
+            inventoryList.innerHTML = '';
+            
+            if (gameState.player.inventory.length === 0) {
+                inventoryList.innerHTML = '<p>所持品はありません</p>';
+                return;
+            }
+            
+            gameState.player.inventory.forEach(item => {
+                const itemElement = document.createElement('div');
+                itemElement.className = 'inventory-item';
+                
+                const pointsText = item.points > 0 ? ` (${item.points}点)` : '';
+                itemElement.innerHTML = `<p>${item.name} x${item.count}${pointsText}</p>`;
+                if (item.description) {
+                    itemElement.innerHTML += `<p style="font-size: 12px; color: #666;">${item.description}</p>`;
+                }
+                
+                inventoryList.appendChild(itemElement);
+            });
+        }
+
+        // ログへの追加
+        function addToLog(message) {
+            const logEntry = document.createElement('p');
+            logEntry.className = 'log-entry';
+            logEntry.textContent = message;
+            logContainer.appendChild(logEntry);
+            
+            // 自動スクロール
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+
+        // ターン終了
+        function endTurn() {
+            gameState.turn++;
+            gameState.canMove = true;
+            document.getElementById('turn-counter').textContent = gameState.turn.toString();
+            addToLog(`ターン${gameState.turn}が始まりました。`);
+            
+            // ビーチにいる場合、脱出チェック
+            if (gameState.island[gameState.player.position].type === 'beach') {
+                checkEscape();
+            }
+        }
+
+        // 食料を使う
+        function useFood() {
+            // 食料アイテムを探す
+            const foodItems = gameState.player.inventory.filter(item => 
+                item.name === '肉' || item.name === '魚' || item.name === '果物');
+            
+            if (foodItems.length === 0) {
+                addToLog('食料がありません。');
+                useFoodButton.disabled = true;
+                return;
+            }
+            
+            // 最も回復量の多い食料を使用
+            let bestFood = foodItems[0];
+            let healAmount = 1; // デフォルト回復量
+            
+            if (bestFood.name === '肉') healAmount = 3;
+            else if (bestFood.name === '魚') healAmount = 2;
+            
+            // 食料を減らす
+            bestFood.count--;
+            if (bestFood.count <= 0) {
+                // アイテムを削除
+                gameState.player.inventory = gameState.player.inventory.filter(item => item.count > 0);
+            }
+            
+            // 体力回復
+            addHealth(healAmount);
+            
+            // 表示更新
+            updateInventoryDisplay();
+            
+            // ログ追加
+            addToLog(`${bestFood.name}を使用して体力が${healAmount}回復しました。`);
+            
+            // 食料がなくなったらボタンを無効化
+            const remainingFood = gameState.player.inventory.some(item => 
+                (item.name === '肉' || item.name === '魚' || item.name === '果物') && item.count > 0);
+            
+            if (!remainingFood) {
+                useFoodButton.disabled = true;
+            }
+        }
+
+        // 脱出チェック
+        function checkEscape() {
+            // 資材ポイントの合計を計算
+            let totalPoints = 0;
+            gameState.player.inventory.forEach(item => {
+                totalPoints += item.points * item.count;
+            });
+            
+            // 一人用のため、脱出条件を調整（10点で成功）
+            const escapeThreshold = 10;
+            
+            if (totalPoints >= escapeThreshold) {
+                // 脱出成功
+                gameOver(true);
+            } else if (totalPoints > 0) {
+                // 資材があるが不十分
+                addToLog(`資材ポイント: ${totalPoints}/${escapeThreshold}。さらに資材を集めましょう。`);
+            }
+        }
+
+        // ゲーム終了
+        function gameOver(success) {
+            gameState.gameOver = true;
+            
+            if (success) {
+                resultTitle.textContent = '脱出成功！';
+                resultDescription.textContent = `ターン${gameState.turn}で無事に島から脱出しました！おめでとうございます！`;
+            } else {
+                resultTitle.textContent = 'ゲームオーバー';
+                resultDescription.textContent = '体力が尽きてしまいました...';
+            }
+            
+            gameOverModal.style.display = 'block';
+        }
+
+        // イベントリスナー
+        startGameButton.addEventListener('click', initGame);
+        endTurnButton.addEventListener('click', endTurn);
+        useFoodButton.addEventListener('click', useFood);
+        eventOkButton.addEventListener('click', () => {
+            eventModal.style.display = 'none';
+        });
+        restartGameButton.addEventListener('click', () => {
+            gameOverModal.style.display = 'none';
+            initGame();
+        });
+
+        // スタートモーダルを表示
+        startModal.style.display = 'block';
+    </script>
+</body>
+</html>
